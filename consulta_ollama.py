@@ -35,10 +35,10 @@ if response.status_code == 200:
     else:
         respuestas = []
 
-    # Agregar la nueva respuesta al array
+    # Agregar la nueva respuesta al array 
     respuestas.append(resultado)
 
-    # Guardar el array actualizado en el archivo
+    # Guardar el array actualizado en el  archivo
     with open(file_name, "w", encoding="utf-8") as file:
         json.dump(respuestas, file, indent=4, ensure_ascii=False)
 
