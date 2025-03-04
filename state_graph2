@@ -1,0 +1,7 @@
+digraph {
+	START [label=Start]
+	node_llm [label="LLM Node"]
+	END [label=End]
+	START -> node_llm
+	node_llm -> END
+}
