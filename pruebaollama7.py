@@ -1,4 +1,5 @@
 import os
+import json
 from langchain_ollama import OllamaLLM
 from langgraph.graph import MessagesState, StateGraph, START, END
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -12,6 +13,26 @@ def slang_checker:
     return ''
 """
 
+
+
+FOLDER_NAME = "IA_assistant_history"
+FILE_NAME = "chat_history.json"
+FILE_PATH = os.path.join(FOLDER_NAME, FILE_NAME)
+
+# Ensure the folder exists
+os.makedirs(FOLDER_NAME, exist_ok=True)
+
+# Load existing conversation history (if file exists)
+if os.path.exists(FILE_PATH):
+    with open(FILE_PATH, "r") as f:
+        try:
+            conversation_data = json.load(f)  # Load previous data
+        except json.JSONDecodeError:
+            conversation_data = []  # If file is empty or corrupt, start fresh
+else:
+    conversation_data = []  # If file does not exist, create a new list
+
+
 # Define AI models
 classifier_model = OllamaLLM(model="mistral:latest") #, tools=[slang_checker])  # Updated AI Assistant (Classifier)
 nlp_model = OllamaLLM(model="phi:latest")  # Natural Language Model
@@ -24,6 +45,27 @@ class State(MessagesState):
     category: str = None
     response: str = None
     history: list = []     # Chat history
+
+
+# Dictionary of unknown words
+UNKNOWN_WORDS = {
+    "qubit": "A qubit is the basic unit of quantum information in a quantum computer.",
+    "blockchain": "Blockchain is a decentralized ledger technology that records transactions securely.",
+    "GAN": "A Generative Adversarial Network (GAN) is a deep learning model used for generating realistic data.",
+    "entropy": "In information theory, entropy represents the unpredictability of data.",
+    "WAWAWA": "Wawawa is a placeholder word with no specific meaning."
+}
+
+def unknown_word_checker(user_input):
+    """
+    Check if the user input contains any unknown words from the dictionary.
+    If found, print their definitions.
+    """
+    for word in UNKNOWN_WORDS:
+        if word.lower() in user_input.lower():
+            print(f"\n🛠️Assistant Tool: The word '{word}' means:\n   {UNKNOWN_WORDS[word]}\n")
+
+
 
 # Function to classify query using the classifier_model
 def classify_query(state: State) -> State:
@@ -96,8 +138,8 @@ def check_response(state: State) -> State:
 
     system_message = SystemMessage(content=
         """
-        You are a response checker. Read the given response and check if it needs improvement. If so, improve it.
-        The answer must be **clear and concise**.
+        You are a response checker. Read the given response and check if it needs improvement. 
+        If so, improve it. But if the response its okay dont change aything.
         """
     )
 
@@ -128,19 +170,32 @@ state = State(history=[])  # Initialize state with memory
 first_time = True  # Flag to track the first interaction
 
 while True:
-    if first_time == True:
-        user_input = input("\n AI Assistant: How can I assist you today?\n> ")
-        first_time = False  # Ensure the prompt doesn't repeat
+    if first_time:
+        user_input = input("\nAI Assistant: How can I assist you today?\n> ")
+        first_time = False  
     else:
-        user_input = input("\n Do you need anything else?\n> ")  # Change prompt for subsequent interactions
+        user_input = input("\nDo you need anything else?\n> ")  
 
     if user_input.lower() in ["exit", "quit", "bye"]:
         print("\n👋 Goodbye! Chat history saved.")
         break
     
+    # ✅ Check for unknown words before processing the AI response
+    unknown_word_checker(user_input)  
+
     state["query"] = user_input
-    final_state = graph.invoke(state)
+    final_state = graph.invoke(state)  
 
     print("\nAI Assistant Response:", final_state["response"])
 
+    # ✅ Append user query and AI response to JSON log
+    conversation_data.append({
+        "user": user_input,
+        "assistant": final_state["response"]
+    })
 
+    # ✅ Save updated conversation history
+    with open(FILE_PATH, "w") as f:
+        json.dump(conversation_data, f, indent=4)
+
+    print(f"\n📄 JSON saved in: {FILE_PATH}")

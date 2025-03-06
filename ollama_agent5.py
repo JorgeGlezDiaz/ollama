@@ -42,8 +42,8 @@ def classify_query(state: State) -> State:
     """
     )
 
-    classification = classifier_model.invoke([system_message, {"role": "user", "content": state["query"]}])
-    state["category"] = classification
+    classification = classifier_model.invoke([system_message, HumanMessage(content=state["query"])])
+    state["category"] = classification.strip()
     
     print(f"✅ The query has been classified as: {state['category']}.")  # Log classification result
     return state
@@ -63,8 +63,9 @@ def process_query(state: State) -> State:
             - For SQL queries, ensure correct syntax and optimization.
             """
         )
-        response = model.invoke([system_message, {"role": "user", "content": state["query"]}])
-        state["response"] = response.strip()
+        messages = [system_message] + state["history"] + [HumanMessage(content=state["query"])]
+
+        response = model.invoke(messages)
 
     else:
         model = nlp_model
@@ -76,8 +77,14 @@ def process_query(state: State) -> State:
             - If answering historical or scientific questions, use reliable knowledge.
             """
         )
-        response = model.invoke([system_message, {"role": "user", "content": state["query"]}])
-        state["response"] = response.strip()
+        messages = [system_message] + state["history"] + [HumanMessage(content=state["query"])]
+
+        response = model.invoke(messages)
+
+    state["response"] = response.strip()
+    # Update memory
+    state["history"].append(HumanMessage(content=state["query"]))
+    state["history"].append(AIMessage(content=state["response"]))
 
     return state
 
@@ -86,14 +93,18 @@ def process_query(state: State) -> State:
 def check_response(state: State) -> State:
 
     print(f"🔍 Using Checker Model: {checker.model}")  # Log model used
+
     system_message = SystemMessage(content=
         """
         You are a response checker. Read the given response and check if it needs improvement. If so, improve it.
         The answer must be **clear and concise**.
         """
     )
-    checked_response = checker.invoke([system_message, {"role": "user", "content": state["response"]}])
-    state["response"] = checked_response
+
+    messages = [system_message] + state["history"] + [AIMessage(content=state["response"])]
+
+    checked_response = checker.invoke(messages)
+    state["response"] = checked_response.strip()
 
     return state
 
@@ -112,10 +123,24 @@ builder.add_edge("check_response", END)
 # Compile the graph
 graph = builder.compile()
 
-# Run the AI Assistant
-user_input = input("AI Assistant: How can I assist you today?\n> ")
-state = {"query": user_input}
-final_state = graph.invoke(state)
+# Continuous conversation loop
+state = State(history=[])  # Initialize state with memory
+first_time = True  # Flag to track the first interaction
 
-# Display response
-print("\nAI Assistant Response:", final_state["response"])
+while True:
+    if first_time == True:
+        user_input = input("\n AI Assistant: How can I assist you today?\n> ")
+        first_time = False  # Ensure the prompt doesn't repeat
+    else:
+        user_input = input("\n Do you need anything else?\n> ")  # Change prompt for subsequent interactions
+
+    if user_input.lower() in ["exit", "quit", "bye"]:
+        print("\n👋 Goodbye! Chat history saved.")
+        break
+    
+    state["query"] = user_input
+    final_state = graph.invoke(state)
+
+    print("\nAI Assistant Response:", final_state["response"])
+
+
